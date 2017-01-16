@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<title>Bubbles!</title>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+		<style>
+			body {
+				background:#777;
+				padding:0;
+				margin:0;
+				overflow:hidden;
+				font-family:monospace;
+				color: #ffffff;
+			}
+
+			#info {
+				position: absolute;
+				top: 0px; width: 100%;
+				color: #ffffff;
+				padding: 5px;
+				font-family:Monospace;
+				font-size:13px;
+				text-align:center;
+				z-index:1000;
+			}
+
+			a {
+				color: #ffffff;
+			}
+
+			.button {
+				background-color: #a9a9a9;
+				color: #ffffff;
+    		text-align: center;
+				font-family:monospace;;
+    		font-size: 32px;
+				padding: 15px 32px;
+			}
+}
+
+			#oldie a { color:#da0 }
+		</style>
+	</head>
+
+	<body>
+		<button class="button" id="bubble">Blow Bubble</button>
+		<button class="button" id="background">Change Background</button>
+
+		<form>
+		    <input type="radio" name="function" id="big" checked>Big
+				<input type="radio" name="function" id="small">Small
+		</form>
+
+		<script src="three.js"></script>
+		<script src="OrbitControls.js"></script>
+		<script src="FresnelShader.js"></script>
+		<script src="Detector.js"></script>
+
+		<script>
+			//cube maps: http://www.humus.name/index.php?page=Textures
+			//base code: webgl_materials_cubemap_ball_reflection.html; we changed a significant amount
+			//trackball implementation imitated from webgl_materials_envmaps.html
+			//Fresnel Shading imitated from webgl_materials_shaders_fresnel.html
+
+
+			if ( ! Detector.webgl ) Detector.addGetWebGLMessage();
+
+			var container;
+
+			var controls; //for trackball implementation
+			var camera, scene, renderer;
+
+			var mesh, geometry;
+			var spheres = [];
+
+			var windowHalfX = window.innerWidth / 2;
+			var windowHalfY = window.innerHeight / 2;
+
+			var size = 5;
+
+			//for varying the cube map
+			var paths = [];
+			var pathNum = 0;
+			var uniforms;
+
+			init();
+			animate();
+
+			function init() {
+
+				container = document.createElement( 'div' );
+				document.body.appendChild( container );
+
+				camera = new THREE.PerspectiveCamera( 60, window.innerWidth / window.innerHeight, 1, 100000 );
+				camera.position.z = 3200;
+
+				//trackball implementation
+				controls = new THREE.OrbitControls( camera );
+				controls.minDistance = 500;
+				controls.maxDistance = 2500;
+
+				// Create paths array (different cube maps)
+				paths[0] = 'textures/Glacier/';
+				paths[1] = 'textures/SkyGrass/';
+				paths[2] = 'textures/SanFrancisco/';
+				paths[3] = 'textures/City/';
+				paths[4] = 'textures/PondNight/';
+
+				var loader = new THREE.CubeTextureLoader();
+				loader.setPath( paths[0]);
+
+				var textureCube = loader.load( [ 'px.jpg', 'nx.jpg', 'py.jpg', 'ny.jpg', 'pz.jpg', 'nz.jpg' ] );
+
+				scene = new THREE.Scene();
+				scene.background = textureCube;
+
+
+				var light = new THREE.AmbientLight(0xffffff); //white ambient light
+				scene.add(light);
+
+
+				var geometry = new THREE.SphereBufferGeometry( 100, 32, 16 );
+
+				//bubble effect shading
+				var shader = THREE.FresnelShader;
+				uniforms = THREE.UniformsUtils.clone( shader.uniforms );
+				
+				uniforms[ "tCube" ].value = textureCube;
+
+				var material = new THREE.ShaderMaterial( {
+					uniforms: uniforms,
+					vertexShader: shader.vertexShader,
+					fragmentShader: shader.fragmentShader
+				} );
+
+				document.getElementById("bubble").onclick = function() {
+					var mesh = new THREE.Mesh( geometry, material);
+
+					mesh.position.x = (Math.random() * (1000 - -1000) + -1000);
+					mesh.position.y = (Math.random() * (1000 - -1000) + -1000);
+					mesh.position.z = (Math.random() * (1000 - -1000) + -1000);
+
+					mesh.scale.x = mesh.scale.y = mesh.scale.z = size;
+					scene.add (mesh);
+					spheres.push(mesh);
+				};
+
+				// Texture change - change path
+				document.getElementById("background").onclick = function() {
+					pathNum = (pathNum + 1) % 5;
+					var loader = new THREE.CubeTextureLoader();
+					loader.setPath( paths[pathNum]);
+
+					var textureCube = loader.load( [ 'px.jpg', 'nx.jpg', 'py.jpg', 'ny.jpg', 'pz.jpg', 'nz.jpg' ] );
+					textureCube.needsUpdate = true;
+
+					scene = new THREE.Scene();
+					scene.background = textureCube;
+
+					uniforms[ "tCube" ].value = textureCube;
+				};
+
+
+				renderer = new THREE.WebGLRenderer();
+				renderer.setPixelRatio( window.devicePixelRatio );
+				renderer.setSize( window.innerWidth, window.innerHeight );
+				container.appendChild( renderer.domElement );
+
+				window.addEventListener( 'resize', onWindowResize, false );
+
+			}
+
+			function onWindowResize() {
+
+				windowHalfX = window.innerWidth / 2,
+				windowHalfY = window.innerHeight / 2,
+
+				camera.aspect = window.innerWidth / window.innerHeight;
+				camera.updateProjectionMatrix();
+
+				renderer.setSize( window.innerWidth, window.innerHeight );
+
+			}
+
+			function animate() {
+
+				requestAnimationFrame( animate );
+
+				render();
+
+				controls.update(); //update based on "trackball" input
+
+			}
+
+			function render() {
+
+				// Change size of bubbles
+				if (document.getElementById("big").checked == true) {
+					size = 5;
+				} else {
+					size = 0.5;
+				}
+
+				var timer = 0.0001 * Date.now();
+
+				for ( var i = 0, il = spheres.length; i < il; i ++ ) {
+
+					var sphere = spheres[ i ];
+
+					sphere.position.x = sphere.position.x + (sphere.position.x * 0.005);
+					sphere.position.y = sphere.position.y + (sphere.position.y * 0.005);
+					sphere.position.z = sphere.position.z + (sphere.position.z * 0.005);
+				}
+
+				camera.lookAt( scene.position );
+
+				renderer.render( scene, camera );
+
+			}
+
+		</script>
+
+	</body>
+</html>
